@@ -19,6 +19,7 @@ import java.util.UUID;
 import org.folio.roles.base.BaseRepositoryTest;
 import org.folio.roles.domain.entity.CapabilityEntity;
 import org.folio.roles.repository.projection.CapabilityDirectProjection;
+import org.folio.roles.repository.projection.CapabilityIdProjection;
 import org.folio.spring.data.OffsetRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -180,15 +181,19 @@ class CapabilityRepositoryIT extends BaseRepositoryTest {
     var offsetRequest = OffsetRequest.of(0, 1, CapabilityEntity.DEFAULT_CAPABILITY_SORT);
     var page = capabilityRepository.findAllByRoleId(roleId, offsetRequest);
     assertThat(page.getTotalElements()).isEqualTo(2);
-    assertThat(page.stream().noneMatch(CapabilityEntity::isDummyCapability)).isTrue();
+    assertThat(page.getContent()).extracting(CapabilityIdProjection::getId)
+      .containsExactly(capabilityEntity.getId());
     offsetRequest = OffsetRequest.of(1, 1, CapabilityEntity.DEFAULT_CAPABILITY_SORT);
     page = capabilityRepository.findAllByRoleId(roleId, offsetRequest);
     assertThat(page.getTotalElements()).isEqualTo(2);
-    assertThat(page.stream().noneMatch(CapabilityEntity::isDummyCapability)).isTrue();
+    assertThat(page.getContent()).extracting(CapabilityIdProjection::getId)
+      .containsExactly(capabilityCapabilitySetEntity.getId());
 
     offsetRequest = OffsetRequest.of(0, 1, CapabilityEntity.DEFAULT_CAPABILITY_SORT);
     page = capabilityRepository.findAllByRoleIdIncludeDummy(roleId, offsetRequest);
     assertThat(page.getTotalElements()).isEqualTo(3);
+    assertThat(page.getContent()).extracting(CapabilityIdProjection::getId)
+      .containsExactly(dummyCapabilityEntity.getId());
   }
 
   @Test

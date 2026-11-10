@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.collections4.CollectionUtils;
@@ -203,17 +205,32 @@ public class CapabilitySetService {
   }
 
   /**
-   * Retrieves capabilities by role id.
+   * Retrieves capability sets by role id.
+   *
+   * <p>The page is loaded with two queries regardless of the page size: one paginated query for the
+   * capability-set identifiers and one query that hydrates the sets with their capabilities. Hydrating
+   * the paginated native query directly would issue one query per returned record instead.</p>
    *
    * @param roleId - role identifier as {@link UUID} object
-   * @return list with {@link Capability} objects
+   * @return list with {@link CapabilitySet} objects
    */
   @Transactional(readOnly = true)
   public PageResult<CapabilitySet> findByRoleId(UUID roleId, int limit, int offset) {
     var offsetRequest = OffsetRequest.of(offset, limit, DEFAULT_CAPABILITY_SET_SORT);
-    var capabilityEntitiesPage = repository.findByRoleId(roleId, offsetRequest);
-    var capabilitiesPage = capabilityEntitiesPage.map(capabilitySetEntityMapper::convert);
-    return PageResult.fromPage(capabilitiesPage);
+    var capabilitySetIdsPage = repository.findCapabilitySetIdsByRoleId(roleId, offsetRequest);
+    if (capabilitySetIdsPage.isEmpty()) {
+      return PageResult.of(capabilitySetIdsPage.getTotalElements(), emptyList());
+    }
+
+    var capabilitySetIds = capabilitySetIdsPage.getContent();
+    var entitiesById = repository.findAllById(capabilitySetIds)
+      .stream()
+      .collect(Collectors.toMap(CapabilitySetEntity::getId, Function.identity()));
+    var capabilitySets = toStream(capabilitySetIds)
+      .filter(entitiesById::containsKey)
+      .map(id -> capabilitySetEntityMapper.convert(entitiesById.get(id)))
+      .toList();
+    return PageResult.of(capabilitySetIdsPage.getTotalElements(), capabilitySets);
   }
 
   /**

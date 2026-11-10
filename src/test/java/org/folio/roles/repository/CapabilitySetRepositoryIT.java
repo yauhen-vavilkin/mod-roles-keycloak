@@ -19,6 +19,7 @@ import org.folio.roles.domain.entity.RoleEntity;
 import org.folio.roles.domain.entity.UserCapabilitySetEntity;
 import org.folio.roles.domain.entity.UserRoleEntity;
 import org.folio.roles.repository.projection.UserCapabilitySetNameProjection;
+import org.folio.spring.data.OffsetRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -87,6 +88,35 @@ class CapabilitySetRepositoryIT extends BaseRepositoryTest {
 
     var actualCapabilitySetEntities = repository.findAllByCapabilityId(capabilityEntity.getId());
     assertThat(actualCapabilitySetEntities).containsExactlyInAnyOrder(capabilitySetEntity1, capabilitySetEntity2);
+  }
+
+  @Test
+  void findCapabilitySetIdsByRoleId_positive_returnsOrderedCapabilitySetIds() {
+    final var roleId = UUID.randomUUID();
+    var capabilityEntity = entityManager.persistAndFlush(capabilityEntity(null));
+    var capabilitySetEntity1 = capabilitySetEntity(null, List.of(capabilityEntity.getId()));
+    capabilitySetEntity1.setName("capabilitySetEntity1");
+    capabilitySetEntity1 = entityManager.persistAndFlush(capabilitySetEntity1);
+    var capabilitySetEntity2 = capabilitySetEntity(null, List.of(capabilityEntity.getId()));
+    capabilitySetEntity2.setName("capabilitySetEntity2");
+    capabilitySetEntity2 = entityManager.persistAndFlush(capabilitySetEntity2);
+    var role = new RoleEntity();
+    role.setId(roleId);
+    role.setName("capability-set-ids-role");
+    role.setDescription("role for capability set ids query");
+    entityManager.persistAndFlush(role);
+    entityManager.persistAndFlush(RoleCapabilitySetEntity.of(roleId, capabilitySetEntity2.getId()));
+    entityManager.persistAndFlush(RoleCapabilitySetEntity.of(roleId, capabilitySetEntity1.getId()));
+
+    var offsetRequest = OffsetRequest.of(0, 1, CapabilitySetEntity.DEFAULT_CAPABILITY_SET_SORT);
+    var page = repository.findCapabilitySetIdsByRoleId(roleId, offsetRequest);
+    assertThat(page.getTotalElements()).isEqualTo(2);
+    assertThat(page.getContent()).containsExactly(capabilitySetEntity1.getId());
+
+    offsetRequest = OffsetRequest.of(1, 1, CapabilitySetEntity.DEFAULT_CAPABILITY_SET_SORT);
+    page = repository.findCapabilitySetIdsByRoleId(roleId, offsetRequest);
+    assertThat(page.getTotalElements()).isEqualTo(2);
+    assertThat(page.getContent()).containsExactly(capabilitySetEntity2.getId());
   }
 
   @Test

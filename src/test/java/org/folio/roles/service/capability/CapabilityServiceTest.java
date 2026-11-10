@@ -34,7 +34,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.folio.integration.kafka.model.ResourceEventType;
 import org.folio.roles.domain.dto.Capability;
-import org.folio.roles.domain.entity.CapabilityEntity;
 import org.folio.roles.domain.model.PageResult;
 import org.folio.roles.domain.model.event.CapabilityEvent;
 import org.folio.roles.integration.mte.MteEntitlementService;
@@ -42,6 +41,7 @@ import org.folio.roles.mapper.entity.CapabilityEntityMapper;
 import org.folio.roles.repository.CapabilityRepository;
 import org.folio.roles.repository.RoleCapabilityRepository;
 import org.folio.roles.repository.projection.CapabilityDirectProjection;
+import org.folio.roles.repository.projection.CapabilityIdProjection;
 import org.folio.roles.service.capability.model.UserPermissionMappings;
 import org.folio.roles.support.TestUtils;
 import org.folio.roles.support.TestUtils.TestModRolesKeycloakModuleMetadata;
@@ -426,9 +426,10 @@ class CapabilityServiceTest {
     void positive_expandIsTrueAndIncludeDummyIsFalse() {
       var capability = capability();
       var capabilityEntity = capabilityEntity();
-      var capabilityEntityPage = new PageImpl<>(List.of(capabilityEntity), offsetRequest, 100);
+      var capabilityIdPage = idPage(offsetRequest, 100, CAPABILITY_ID);
 
-      when(capabilityRepository.findAllByRoleId(ROLE_ID, offsetRequest)).thenReturn(capabilityEntityPage);
+      when(capabilityRepository.findAllByRoleId(ROLE_ID, offsetRequest)).thenReturn(capabilityIdPage);
+      when(capabilityRepository.findAllById(List.of(CAPABILITY_ID))).thenReturn(List.of(capabilityEntity));
       when(capabilityEntityMapper.convert(capabilityEntity)).thenReturn(capability);
       when(roleCapabilityRepository.findCapabilityIdsByRoleId(ROLE_ID)).thenReturn(Set.of(CAPABILITY_ID));
 
@@ -444,9 +445,10 @@ class CapabilityServiceTest {
     void positive_expandIsTrueAndIncludeDummyIsTrue() {
       var capability = capability();
       var capabilityEntity = capabilityEntity();
-      var capabilityEntityPage = new PageImpl<>(List.of(capabilityEntity), offsetRequest, 100);
+      var capabilityIdPage = idPage(offsetRequest, 100, CAPABILITY_ID);
 
-      when(capabilityRepository.findAllByRoleIdIncludeDummy(ROLE_ID, offsetRequest)).thenReturn(capabilityEntityPage);
+      when(capabilityRepository.findAllByRoleIdIncludeDummy(ROLE_ID, offsetRequest)).thenReturn(capabilityIdPage);
+      when(capabilityRepository.findAllById(List.of(CAPABILITY_ID))).thenReturn(List.of(capabilityEntity));
       when(capabilityEntityMapper.convert(capabilityEntity)).thenReturn(capability);
       when(roleCapabilityRepository.findCapabilityIdsByRoleId(ROLE_ID)).thenReturn(emptySet());
 
@@ -460,15 +462,35 @@ class CapabilityServiceTest {
 
     @Test
     void positive_expandIsTrueAndEmptyPageSkipsDirectIdsLookup() {
-      var capabilityEntityPage = new PageImpl<CapabilityEntity>(List.of(), offsetRequest, 0);
+      var capabilityIdPage = new PageImpl<CapabilityIdProjection>(List.of(), offsetRequest, 0);
 
-      when(capabilityRepository.findAllByRoleId(ROLE_ID, offsetRequest)).thenReturn(capabilityEntityPage);
+      when(capabilityRepository.findAllByRoleId(ROLE_ID, offsetRequest)).thenReturn(capabilityIdPage);
 
       var result = capabilityService.findByRoleId(ROLE_ID, true, false, 10, 0);
 
       assertThat(result).isEqualTo(PageResult.empty());
       verify(capabilityRepository).findAllByRoleId(ROLE_ID, offsetRequest);
       verifyNoInteractions(roleCapabilityRepository);
+    }
+
+    @Test
+    void positive_expandIsTrueSkipsRowsMissingFromHydration() {
+      var capability = capability();
+      var capabilityEntity = capabilityEntity();
+      var missingCapabilityId = UUID.randomUUID();
+      var capabilityIdPage = idPage(offsetRequest, 2, CAPABILITY_ID, missingCapabilityId);
+
+      when(capabilityRepository.findAllByRoleId(ROLE_ID, offsetRequest)).thenReturn(capabilityIdPage);
+      when(capabilityRepository.findAllById(List.of(CAPABILITY_ID, missingCapabilityId)))
+        .thenReturn(List.of(capabilityEntity));
+      when(capabilityEntityMapper.convert(capabilityEntity)).thenReturn(capability);
+      when(roleCapabilityRepository.findCapabilityIdsByRoleId(ROLE_ID)).thenReturn(Set.of(CAPABILITY_ID));
+
+      var result = capabilityService.findByRoleId(ROLE_ID, true, false, 10, 0);
+
+      assertThat(result.getTotalRecords()).isEqualTo(2);
+      assertThat(result.getRecords()).containsExactly(capability);
+      verify(capabilityRepository).findAllByRoleId(ROLE_ID, offsetRequest);
     }
 
     @Test
@@ -539,6 +561,17 @@ class CapabilityServiceTest {
       assertThat(result.getRecords()).containsExactly(capability);
       assertThat(result.getRecords()).extracting(Capability::getDirect).containsExactly(true);
       verify(capabilityRepository).findAllByRoleIdNoDedup(ROLE_ID, noDedupOffsetRequest);
+    }
+
+    private PageImpl<CapabilityIdProjection> idPage(OffsetRequest request, long total, UUID... capabilityIds) {
+      var rows = Stream.of(capabilityIds)
+        .map(id -> {
+          var row = Mockito.mock(CapabilityIdProjection.class);
+          when(row.getId()).thenReturn(id);
+          return row;
+        })
+        .collect(Collectors.toList());
+      return new PageImpl<>(rows, request, total);
     }
   }
 

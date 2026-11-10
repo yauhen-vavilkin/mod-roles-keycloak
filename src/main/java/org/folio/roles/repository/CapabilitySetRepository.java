@@ -28,14 +28,21 @@ public interface CapabilitySetRepository extends BaseCqlJpaRepository<Capability
       INNER JOIN user_capability_set ucs ON cs.id = ucs.capability_set_id AND ucs.user_id = :user_id""")
   Page<CapabilitySetEntity> findByUserId(@Param("user_id") UUID userId, OffsetRequest offsetRequest);
 
+  /**
+   * Returns capability-set identifiers assigned to the role.
+   *
+   * <p>Only identifiers are selected on purpose: eager {@code capabilities} collections of hydrated
+   * {@link CapabilitySetEntity} rows would be loaded with one query per record for native queries.
+   * The caller hydrates the page content in batches instead.</p>
+   */
   @Query(nativeQuery = true,
     value = """
-      SELECT cs.* FROM capability_set cs
+      SELECT cs.id FROM capability_set cs
       INNER JOIN role_capability_set rcs ON cs.id = rcs.capability_set_id AND rcs.role_id = :role_id""",
     countQuery = """
       SELECT COUNT(cs.*) FROM capability_set cs
       INNER JOIN role_capability_set rcs ON cs.id = rcs.capability_set_id AND rcs.role_id = :role_id""")
-  Page<CapabilitySetEntity> findByRoleId(@Param("role_id") UUID roleId, OffsetRequest offsetRequest);
+  Page<UUID> findCapabilitySetIdsByRoleId(@Param("role_id") UUID roleId, OffsetRequest offsetRequest);
 
   @Query("select distinct entity.id from CapabilitySetEntity entity where entity.id in :ids order by entity.id")
   Set<UUID> findCapabilitySetIdsByIdIn(@Param("ids") Collection<UUID> capabilitySetIds);

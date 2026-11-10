@@ -433,17 +433,32 @@ class CapabilitySetServiceTest {
 
     @Test
     void positive() {
-      var userCapabilitySetEntity = capabilitySetEntity();
-      var pageResult = new PageImpl<>(List.of(userCapabilitySetEntity));
+      var capabilitySetEntity = capabilitySetEntity();
+      var capabilitySetIdPage = new PageImpl<>(List.of(CAPABILITY_SET_ID));
       var expectedCapabilitySet = capabilitySet();
 
-      when(capabilitySetRepository.findByRoleId(ROLE_ID, offsetRequest)).thenReturn(pageResult);
-      when(mapper.convert(userCapabilitySetEntity)).thenReturn(expectedCapabilitySet);
+      when(capabilitySetRepository.findCapabilitySetIdsByRoleId(ROLE_ID, offsetRequest))
+        .thenReturn(capabilitySetIdPage);
+      when(capabilitySetRepository.findAllById(List.of(CAPABILITY_SET_ID))).thenReturn(List.of(capabilitySetEntity));
+      when(mapper.convert(capabilitySetEntity)).thenReturn(expectedCapabilitySet);
 
       var result = capabilitySetService.findByRoleId(ROLE_ID, 15, 0);
 
       assertThat(result).isEqualTo(asSinglePage(expectedCapabilitySet));
-      verify(capabilitySetRepository).findByRoleId(ROLE_ID, offsetRequest);
+      verify(capabilitySetRepository).findCapabilitySetIdsByRoleId(ROLE_ID, offsetRequest);
+    }
+
+    @Test
+    void positive_emptyPageSkipsHydration() {
+      var capabilitySetIdPage = new PageImpl<UUID>(List.of(), offsetRequest, 0);
+
+      when(capabilitySetRepository.findCapabilitySetIdsByRoleId(ROLE_ID, offsetRequest))
+        .thenReturn(capabilitySetIdPage);
+
+      var result = capabilitySetService.findByRoleId(ROLE_ID, 15, 0);
+
+      assertThat(result).isEqualTo(PageResult.empty());
+      verify(capabilitySetRepository).findCapabilitySetIdsByRoleId(ROLE_ID, offsetRequest);
     }
   }
 

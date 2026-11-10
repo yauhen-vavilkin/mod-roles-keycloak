@@ -39,6 +39,7 @@ import org.folio.roles.mapper.entity.CapabilityEntityMapper;
 import org.folio.roles.repository.CapabilityRepository;
 import org.folio.roles.repository.RoleCapabilityRepository;
 import org.folio.roles.repository.projection.CapabilityDirectProjection;
+import org.folio.roles.repository.projection.CapabilityIdProjection;
 import org.folio.spring.FolioExecutionContext;
 import org.folio.spring.data.OffsetRequest;
 import org.springframework.context.ApplicationEventPublisher;
@@ -202,16 +203,23 @@ public class CapabilityService {
   private PageResult<Capability> findExpandedCapabilitiesByRoleId(UUID roleId, boolean includeDummy,
     int limit, int offset) {
     var offsetRequest = OffsetRequest.of(offset, limit, DEFAULT_CAPABILITY_SORT);
-    var capabilityEntitiesPage = findAllCapabilityEntitiesByRoleId(includeDummy, roleId, offsetRequest);
-    if (capabilityEntitiesPage.isEmpty()) {
-      return PageResult.of(capabilityEntitiesPage.getTotalElements(), emptyList());
+    var capabilityIdsPage = includeDummy
+      ? capabilityRepository.findAllByRoleIdIncludeDummy(roleId, offsetRequest)
+      : capabilityRepository.findAllByRoleId(roleId, offsetRequest);
+    if (capabilityIdsPage.isEmpty()) {
+      return PageResult.of(capabilityIdsPage.getTotalElements(), emptyList());
     }
 
+    var capabilityIds = mapItems(capabilityIdsPage.getContent(), CapabilityIdProjection::getId);
+    var entitiesById = capabilityRepository.findAllById(capabilityIds)
+      .stream()
+      .collect(Collectors.toMap(CapabilityEntity::getId, identity()));
     var directCapabilityIds = roleCapabilityRepository.findCapabilityIdsByRoleId(roleId);
-    var capabilitiesPage = capabilityEntitiesPage
-      .map(capabilityEntityMapper::convert)
-      .map(capability -> capability.direct(directCapabilityIds.contains(capability.getId())));
-    return PageResult.fromPage(capabilitiesPage);
+    var capabilities = toStream(capabilityIds)
+      .filter(entitiesById::containsKey)
+      .map(id -> capabilityEntityMapper.convert(entitiesById.get(id)).direct(directCapabilityIds.contains(id)))
+      .toList();
+    return PageResult.of(capabilityIdsPage.getTotalElements(), capabilities);
   }
 
   private PageResult<Capability> findExpandedCapabilitiesByRoleIdNoDedup(UUID roleId, boolean includeDummy,
@@ -494,13 +502,6 @@ public class CapabilityService {
     return includeDummy
       ? capabilityRepository.findByUserIdIncludeDummy(userId, offsetRequest)
       : capabilityRepository.findByUserId(userId, offsetRequest);
-  }
-
-  private Page<CapabilityEntity> findAllCapabilityEntitiesByRoleId(boolean includeDummy, UUID roleId,
-    OffsetRequest offsetRequest) {
-    return includeDummy
-      ? capabilityRepository.findAllByRoleIdIncludeDummy(roleId, offsetRequest)
-      : capabilityRepository.findAllByRoleId(roleId, offsetRequest);
   }
 
   private Page<CapabilityEntity> findCapabilityEntitiesByRoleId(boolean includeDummy, UUID roleId,
