@@ -211,11 +211,12 @@ public class RoleCapabilitySetServiceImpl implements RoleCapabilitySetService {
   }
 
   private PageResult<RoleCapabilitySet> createRoleCapabilitySets(UUID roleId, List<UUID> setIds, boolean safeCreate) {
+    roleService.getById(roleId);
     if (isEmpty(setIds)) {
-      throw new IllegalArgumentException("List with capability set identifiers is empty");
+      log.debug("Passing through empty capability set assignment request: roleId = {}", roleId);
+      return PageResult.empty();
     }
 
-    roleService.getById(roleId);
     var existingEntities = roleCapabilitySetRepository.findRoleCapabilitySets(roleId, setIds);
     var existingCapabilitySetIds = getCapabilitySetIds(existingEntities);
     if (!safeCreate && isNotEmpty(existingCapabilitySetIds)) {

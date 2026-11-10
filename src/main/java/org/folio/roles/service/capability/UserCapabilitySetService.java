@@ -3,13 +3,12 @@ package org.folio.roles.service.capability;
 import static java.lang.Integer.MAX_VALUE;
 import static java.util.Collections.emptyList;
 import static org.apache.commons.collections4.CollectionUtils.isEmpty;
-import static org.apache.commons.collections4.CollectionUtils.isNotEmpty;
 import static org.folio.common.utils.CollectionUtils.mapItems;
 import static org.folio.roles.domain.entity.UserCapabilitySetEntity.DEFAULT_USER_CAPABILITY_SET_SORT;
 import static org.folio.roles.domain.model.event.UserPermissionsChangedEvent.userPermissionsChanged;
 import static org.folio.roles.utils.CapabilityUtils.getCapabilityEndpoints;
+import static org.folio.roles.utils.CollectionUtils.difference;
 
-import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.Collection;
 import java.util.List;
@@ -49,25 +48,32 @@ public class UserCapabilitySetService {
   /**
    * Creates a record(s) associating one or more capabilitySets with a user.
    *
+   * <p>The operation is idempotent: existing user-capability set relations are filtered out and only new
+   * relations are created. Requests with empty permission lists are passed through and result in an
+   * empty {@link PageResult}.</p>
+   *
    * @param userId - user identifier as {@link UUID} object
    * @param capabilitySetIds - capabilitySet identifiers as {@link List} of {@link UUID} objects
    * @return {@link PageResult} with created {@link UserCapabilitySet} relations
    */
   @Transactional
   public PageResult<UserCapabilitySet> create(UUID userId, List<UUID> capabilitySetIds) {
+    keycloakUserService.getKeycloakUserByUserId(userId);
     if (isEmpty(capabilitySetIds)) {
-      throw new IllegalArgumentException("List with capability set identifiers is empty");
+      log.debug("Passing through empty capability set assignment request: userId = {}", userId);
+      return PageResult.empty();
     }
 
-    keycloakUserService.getKeycloakUserByUserId(userId);
     var existingEntities = userCapabilitySetRepository.findUserCapabilitySets(userId, capabilitySetIds);
     var existingCapabilitySetIds = getCapabilitySetIds(existingEntities);
-    if (isNotEmpty(existingCapabilitySetIds)) {
-      throw new EntityExistsException(String.format(
-        "Relation already exists for user='%s' and capabilitySets=%s", userId, existingCapabilitySetIds));
+    var newCapabilitySetIds = difference(capabilitySetIds, existingCapabilitySetIds);
+    if (isEmpty(newCapabilitySetIds)) {
+      log.debug("All capability sets are already assigned to user: userId = {}, capabilitySetIds = {}",
+        userId, capabilitySetIds);
+      return PageResult.empty();
     }
 
-    var result = assignCapabilities(userId, capabilitySetIds, emptyList());
+    var result = assignCapabilities(userId, newCapabilitySetIds, emptyList());
     eventPublisher.publishEvent(userPermissionsChanged(userId));
     return result;
   }

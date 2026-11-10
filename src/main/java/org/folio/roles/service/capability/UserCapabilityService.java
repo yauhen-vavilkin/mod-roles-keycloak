@@ -3,11 +3,10 @@ package org.folio.roles.service.capability;
 import static java.lang.Integer.MAX_VALUE;
 import static java.util.Collections.emptyList;
 import static org.apache.commons.collections4.CollectionUtils.isEmpty;
-import static org.apache.commons.collections4.CollectionUtils.isNotEmpty;
 import static org.folio.common.utils.CollectionUtils.mapItems;
 import static org.folio.roles.domain.model.event.UserPermissionsChangedEvent.userPermissionsChanged;
+import static org.folio.roles.utils.CollectionUtils.difference;
 
-import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.Collection;
 import java.util.List;
@@ -49,25 +48,32 @@ public class UserCapabilityService {
   /**
    * Creates a record(s) associating one or more capabilities with the user.
    *
+   * <p>The operation is idempotent: existing user-capability relations are filtered out and only new
+   * relations are created. Requests with empty permission lists are passed through and result in an
+   * empty {@link PageResult}.</p>
+   *
    * @param userId - user identifier as {@link UUID} object
    * @param capabilityIds - capability identifiers as {@link List} of {@link UUID} objects
    * @return {@link UserCapabilities} object with created user-capability relations
    */
   @Transactional
   public PageResult<UserCapability> create(UUID userId, List<UUID> capabilityIds) {
-    if (isEmpty(capabilityIds)) {
-      throw new IllegalArgumentException("Capability id list is empty");
-    }
-
     keycloakUserService.getKeycloakUserByUserId(userId);
-    var existingEntities = userCapabilityRepository.findUserCapabilities(userId, capabilityIds);
-    var existingCapabilitySetIds = getCapabilityIds(existingEntities);
-    if (isNotEmpty(existingCapabilitySetIds)) {
-      throw new EntityExistsException(String.format(
-        "Relation already exists for user='%s' and capabilities=%s", userId, existingCapabilitySetIds));
+    if (isEmpty(capabilityIds)) {
+      log.debug("Passing through empty capability assignment request: userId = {}", userId);
+      return PageResult.empty();
     }
 
-    var result = assignCapabilities(userId, capabilityIds, emptyList());
+    var existingEntities = userCapabilityRepository.findUserCapabilities(userId, capabilityIds);
+    var existingCapabilityIds = getCapabilityIds(existingEntities);
+    var newCapabilityIds = difference(capabilityIds, existingCapabilityIds);
+    if (isEmpty(newCapabilityIds)) {
+      log.debug("All capabilities are already assigned to user: userId = {}, capabilityIds = {}",
+        userId, capabilityIds);
+      return PageResult.empty();
+    }
+
+    var result = assignCapabilities(userId, newCapabilityIds, emptyList());
     eventPublisher.publishEvent(userPermissionsChanged(userId));
     return result;
   }

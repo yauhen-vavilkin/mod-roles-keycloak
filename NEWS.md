@@ -1,4 +1,8 @@
 ## Version `v4.1.0` (IN PROGRESS)
+* Make capability / capability set assignment endpoints idempotent (MODROLESKC-303)
+  - `POST /roles/capabilities`, `POST /roles/capability-sets`, `POST /users/capabilities` and
+    `POST /users/capability-sets` now filter out already assigned permissions and only create new
+    relations; requests with empty permission lists are passed through and return an empty result.
 * Improve cleanup of keycloak records upon role removal (MODROLESKC-384)
 * Fix race condition that could leave default loadable-role permissions without assigned capabilities during tenant initialization (MODROLESKC-347)
 * Delete the Log4j configuration so the logging settings are automatically inherited from `folio-spring-base`. (EUREKA-889)

@@ -208,11 +208,38 @@ class RoleCapabilitySetServiceImplTest {
     }
 
     @Test
-    void negative_emptyCapabilities() {
-      var capabilityIds = Collections.<UUID>emptyList();
-      assertThatThrownBy(() -> roleCapabilitySetService.create(ROLE_ID, capabilityIds, false))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessage("List with capability set identifiers is empty");
+    void positive_emptyCapabilitySets() {
+      when(roleService.getById(ROLE_ID)).thenReturn(role());
+
+      var result = roleCapabilitySetService.create(ROLE_ID, Collections.<UUID>emptyList(), false);
+
+      assertThat(result).isEqualTo(PageResult.empty());
+      verify(eventPublisher).publishEvent(tenantPermissionsChanged());
+    }
+
+    @Test
+    void positive_filteredExistingCapabilitySets() {
+      var newRoleCapabilitySet = roleCapabilitySet(capabilitySetId2);
+      var capabilitySetIds = List.of(capabilitySetId1, capabilitySetId2);
+      var assignedEntity = roleCapabilitySetEntity(ROLE_ID, capabilitySetId1);
+      var newEntity = roleCapabilitySetEntity(capabilitySetId2);
+      var newCapabilitySetIds = List.of(capabilitySetId2);
+      var endpoints = List.of(endpoint());
+
+      when(roleService.getById(ROLE_ID)).thenReturn(role());
+      when(roleCapabilitySetRepository.findRoleCapabilitySets(ROLE_ID, capabilitySetIds))
+        .thenReturn(List.of(assignedEntity));
+      when(roleCapabilitySetRepository.saveAll(List.of(newEntity))).thenReturn(List.of(newEntity));
+      when(roleCapabilitySetEntityMapper.convert(newEntity)).thenReturn(newRoleCapabilitySet);
+      when(capabilityService.findByRoleId(ROLE_ID, false, false, MAX_VALUE, 0)).thenReturn(empty());
+      when(endpointService.getByCapabilitySetIds(newCapabilitySetIds, emptyList(), emptyList())).thenReturn(endpoints);
+
+      var result = roleCapabilitySetService.create(ROLE_ID, capabilitySetIds, true);
+
+      assertThat(result).isEqualTo(asSinglePage(newRoleCapabilitySet));
+      verify(capabilitySetService).checkIds(newCapabilitySetIds);
+      verify(rolePermissionService).createPermissions(ROLE_ID, endpoints);
+      verify(eventPublisher).publishEvent(tenantPermissionsChanged());
     }
 
     @Test

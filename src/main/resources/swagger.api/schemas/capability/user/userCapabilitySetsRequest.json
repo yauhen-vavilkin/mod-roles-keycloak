@@ -10,14 +10,13 @@
       "description": "User identifier"
     },
     "capabilitySetIds": {
-      "description": "List of capability identifiers",
+      "description": "List of capability set identifiers. The operation is idempotent: already assigned capability sets are ignored and only new user-capability set relations are created",
       "type": "array",
       "items": {
         "type": "string",
         "description": "Capability set identifier",
         "format": "uuid"
-      },
-      "minItems": 1
+      }
     }
   },
   "required": [ "roleId", "capabilitySetIds" ]

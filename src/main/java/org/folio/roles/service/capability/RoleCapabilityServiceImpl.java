@@ -206,11 +206,12 @@ public class RoleCapabilityServiceImpl implements RoleCapabilityService {
   }
 
   private PageResult<RoleCapability> createRoleCapabilities(UUID roleId, List<UUID> capabilityIds, boolean safeCreate) {
+    roleService.getById(roleId);
     if (isEmpty(capabilityIds)) {
-      throw new IllegalArgumentException("Capability id list is empty");
+      log.debug("Passing through empty capability assignment request: roleId = {}", roleId);
+      return PageResult.empty();
     }
 
-    roleService.getById(roleId);
     var existingEntities = roleCapabilityRepository.findRoleCapabilities(roleId, capabilityIds);
     var existingCapabilityIds = getCapabilityIds(existingEntities);
     if (!safeCreate && isNotEmpty(existingCapabilityIds)) {

@@ -287,11 +287,14 @@ class UserCapabilitySetIT extends BaseIntegrationTest {
   }
 
   @Test
-  void assignCapabilities_negative_emptyCapabilities() throws Exception {
+  @KeycloakRealms("/json/keycloak/user-capability-fresh-realm.json")
+  void assignCapabilities_positive_emptyCapabilitySets() throws Exception {
     var request = userCapabilitySetsRequest(USER_ID, emptyList());
-    attemptToPostUserCapabilitySets(request)
-      .andExpect(status().isBadRequest())
-      .andExpectAll(argumentNotValidErr("size must be between 1 and 2147483647", "capabilitySetIds", "[]"));
+
+    postUserCapabilitySets(request)
+      .andExpect(content().json(asJsonString(userCapabilitySets())));
+
+    assertThat(kcTestClient.getPermissionNames()).isEmpty();
   }
 
   @Test
@@ -301,18 +304,17 @@ class UserCapabilitySetIT extends BaseIntegrationTest {
     "classpath:/sql/capability-sets/populate-user-capability-set-relations.sql"
   })
   @KeycloakRealms("/json/keycloak/user-capability-fresh-realm.json")
-  void assignCapabilities_negative_alreadyAssigned() throws Exception {
-    var capabilitySetIds = List.of(FOO_CREATE_CAPABILITY_SET);
+  void assignCapabilities_positive_existingAssignmentsAreFilteredOut() throws Exception {
+    var capabilitySetIds = List.of(FOO_CREATE_CAPABILITY_SET, FOO_EDIT_CAPABILITY_SET);
     var request = userCapabilitySetsRequest(USER_ID, capabilitySetIds);
+    var expectedUserCapabilitySets = userCapabilitySets(userCapabilitySet(USER_ID, FOO_EDIT_CAPABILITY_SET));
 
-    attemptToPostUserCapabilitySets(request)
-      .andExpect(status().isBadRequest())
-      .andExpect(jsonPath("$.total_records", is(1)))
-      .andExpect(jsonPath("$.errors[0].code", is("found_error")))
-      .andExpect(jsonPath("$.errors[0].type", is("EntityExistsException")))
-      .andExpect(jsonPath("$.errors[0].message", is(String.format(
-        "Relation already exists for user='%s' and capabilitySets=%s", USER_ID, capabilitySetIds))))
-    ;
+    postUserCapabilitySets(request)
+      .andExpect(content().json(asJsonString(expectedUserCapabilitySets)));
+
+    assertThat(kcTestClient.getPermissionNames()).containsOnly(
+      kcPermissionName(fooItemGetEndpoint()),
+      kcPermissionName(fooItemPutEndpoint()));
   }
 
   @Test

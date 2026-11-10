@@ -248,7 +248,11 @@ paths:
 
   /roles/capabilities:
     post:
-      description: Create a record associating one or more capabilities with the role
+      description: >-
+        Create records associating one or more capabilities with the role.
+        The operation is idempotent: already assigned capabilities are ignored and only new
+        role-capability relations are created. A request with an empty permission list is passed
+        through and returns an empty result. Existing relations are not modified.
       operationId: createRoleCapabilities
       tags:
         - role-capability
@@ -361,7 +365,11 @@ paths:
 
   /roles/capability-sets:
     post:
-      description: Create a record associating one or more capabilities with the role
+      description: >-
+        Create records associating one or more capability sets with the role.
+        The operation is idempotent: already assigned capability sets are ignored and only new
+        role-capability set relations are created. A request with an empty permission list is passed
+        through and returns an empty result. Existing relations are not modified.
       operationId: createRoleCapabilitySets
       tags:
         - role-capability-set
@@ -816,7 +824,11 @@ paths:
 
   /users/capabilities:
     post:
-      description: Create a record associating one or more capabilities with a user.
+      description: >-
+        Create records associating one or more capabilities with a user.
+        The operation is idempotent: already assigned capabilities are ignored and only new
+        user-capability relations are created. A request with an empty permission list is passed
+        through and returns an empty result. Existing relations are not modified.
       operationId: createUserCapabilities
       tags:
         - user-capability
@@ -928,7 +940,11 @@ paths:
 
   /users/capability-sets:
     post:
-      description: Create a record associating one or more capabilities with a user.
+      description: >-
+        Create records associating one or more capability sets with a user.
+        The operation is idempotent: already assigned capability sets are ignored and only new
+        user-capability set relations are created. A request with an empty permission list is passed
+        through and returns an empty result. Existing relations are not modified.
       operationId: createUserCapabilitySets
       tags:
         - user-capability-set
