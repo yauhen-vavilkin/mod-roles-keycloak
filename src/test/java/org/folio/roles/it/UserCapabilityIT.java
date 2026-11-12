@@ -187,11 +187,14 @@ class UserCapabilityIT extends BaseIntegrationTest {
   }
 
   @Test
-  void assignCapabilities_negative_emptyCapabilities() throws Exception {
+  @KeycloakRealms("/json/keycloak/user-capability-fresh-realm.json")
+  void assignCapabilities_positive_emptyCapabilities() throws Exception {
     var request = userCapabilitiesRequest(USER_ID, emptyList());
-    attemptToPostUserCapabilities(request)
-      .andExpect(status().isBadRequest())
-      .andExpectAll(argumentNotValidErr("size must be between 1 and 2147483647", "capabilityIds", "[]"));
+
+    postUserCapabilities(request)
+      .andExpect(content().json(asJsonString(userCapabilities())));
+
+    assertThat(kcTestClient.getPermissionNames()).isEmpty();
   }
 
   @Test
@@ -201,17 +204,23 @@ class UserCapabilityIT extends BaseIntegrationTest {
     "classpath:/sql/capabilities/populate-capabilities.sql",
     "classpath:/sql/capabilities/populate-user-capability-relations.sql"
   })
-  void assignCapabilities_negative_alreadyAssigned() throws Exception {
-    var capabilityIds = List.of(FOO_CREATE_CAPABILITY, FOO_VIEW_CAPABILITY);
+  void assignCapabilities_positive_existingAssignmentsAreFilteredOut() throws Exception {
+    var capabilityIds = List.of(FOO_CREATE_CAPABILITY, FOO_VIEW_CAPABILITY, FOO_DELETE_CAPABILITY);
     var request = userCapabilitiesRequest(USER_ID, capabilityIds);
+    var expectedUserCapabilities = userCapabilities(userCapability(USER_ID, FOO_DELETE_CAPABILITY));
 
-    attemptToPostUserCapabilities(request)
-      .andExpect(status().isBadRequest())
-      .andExpect(jsonPath("$.errors[0].message", is(String.format(
-        "Relation already exists for user='%s' and capabilities=%s", USER_ID, capabilityIds))))
-      .andExpect(jsonPath("$.errors[0].code", is("found_error")))
-      .andExpect(jsonPath("$.errors[0].type", is("EntityExistsException")))
-      .andExpect(jsonPath("$.total_records", is(1)));
+    postUserCapabilities(request)
+      .andExpect(content().json(asJsonString(expectedUserCapabilities)));
+
+    doGet(get("/users/capabilities")
+      .header(TENANT, TENANT_ID)
+      .header(XOkapiHeaders.USER_ID, USER_ID_HEADER))
+      .andExpect(content().json(asJsonString(userCapabilities(
+        userCapability(USER_ID, FOO_CREATE_CAPABILITY),
+        userCapability(USER_ID, FOO_VIEW_CAPABILITY),
+        userCapability(USER_ID, FOO_DELETE_CAPABILITY)))));
+
+    assertThat(kcTestClient.getPermissionNames()).containsOnly(kcPermissionName(fooItemDeleteEndpoint()));
   }
 
   @Test

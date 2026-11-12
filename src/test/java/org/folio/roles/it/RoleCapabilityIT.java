@@ -258,13 +258,12 @@ class RoleCapabilityIT extends BaseIntegrationTest {
   }
 
   @Test
-  void assignCapabilities_negative_emptyCapabilities() throws Exception {
-    attemptToPostRoleCapabilities(roleCapabilitiesRequest(ROLE_ID, emptyList()))
-      .andExpect(status().isBadRequest())
-      .andExpect(jsonPath("$.errors[0].message")
-        .value("'capabilityIds' or 'capabilityNames' must not be null"))
-      .andExpect(jsonPath("$.errors[0].type").value("IllegalArgumentException"))
-      .andExpect(jsonPath("$.errors[0].code").value("validation_error"));
+  @Sql("classpath:/sql/populate-test-role.sql")
+  void assignCapabilities_positive_emptyCapabilities() throws Exception {
+    postRoleCapabilities(roleCapabilitiesRequest(ROLE_ID, emptyList()))
+      .andExpect(content().json(asJsonString(roleCapabilities())));
+
+    assertThat(kcTestClient.getPermissionNames()).isEmpty();
   }
 
   @Test
@@ -288,17 +287,15 @@ class RoleCapabilityIT extends BaseIntegrationTest {
     "classpath:/sql/capabilities/populate-capabilities.sql",
     "classpath:/sql/capabilities/populate-role-capability-relations.sql"
   })
-  void assignCapabilities_negative_alreadyAssigned() throws Exception {
-    var capabilityIds = List.of(FOO_CREATE_CAPABILITY, FOO_VIEW_CAPABILITY);
+  void assignCapabilities_positive_existingAssignmentsAreFilteredOut() throws Exception {
+    var capabilityIds = List.of(FOO_CREATE_CAPABILITY, FOO_VIEW_CAPABILITY, FOO_DELETE_CAPABILITY);
     var req = roleCapabilitiesRequest(ROLE_ID, capabilityIds);
+    var expectedRoleCapabilities = roleCapabilities(roleCapability(ROLE_ID, FOO_DELETE_CAPABILITY));
 
-    attemptToPostRoleCapabilities(req)
-      .andExpect(status().isBadRequest())
-      .andExpect(jsonPath("$.errors[0].message", is(String.format(
-        "Relation already exists for role='%s' and capabilities=%s", ROLE_ID, capabilityIds))))
-      .andExpect(jsonPath("$.errors[0].code", is("found_error")))
-      .andExpect(jsonPath("$.errors[0].type", is("EntityExistsException")))
-      .andExpect(jsonPath("$.total_records", is(1)));
+    postRoleCapabilities(req)
+      .andExpect(content().json(asJsonString(expectedRoleCapabilities)));
+
+    assertThat(kcTestClient.getPermissionNames()).containsOnly(kcPermissionName(fooItemDeleteEndpoint()));
   }
 
   @Test

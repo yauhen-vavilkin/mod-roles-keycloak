@@ -239,11 +239,37 @@ class RoleCapabilityServiceImplTest {
     }
 
     @Test
-    void negative_emptyCapabilities() {
-      var capabilityIds = Collections.<UUID>emptyList();
-      assertThatThrownBy(() -> roleCapabilityService.create(ROLE_ID, capabilityIds, false))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessage("Capability id list is empty");
+    void positive_emptyCapabilities() {
+      when(roleService.getById(ROLE_ID)).thenReturn(role());
+
+      var result = roleCapabilityService.create(ROLE_ID, Collections.<UUID>emptyList(), false);
+
+      assertThat(result).isEqualTo(empty());
+      verify(eventPublisher).publishEvent(tenantPermissionsChanged());
+    }
+
+    @Test
+    void positive_filteredExistingCapabilities() {
+      var newRoleCapability = roleCapability(capabilityId2);
+      var capabilityIds = List.of(capabilityId1, capabilityId2);
+      var assignedEntity = roleCapabilityEntity(ROLE_ID, capabilityId1);
+      var newEntity = roleCapabilityEntity(capabilityId2);
+      var newCapabilityIds = List.of(capabilityId2);
+      var endpoints = List.of(endpoint("/c2", GET));
+
+      when(roleService.getById(ROLE_ID)).thenReturn(role());
+      when(roleCapabilityRepository.findRoleCapabilities(ROLE_ID, capabilityIds)).thenReturn(List.of(assignedEntity));
+      when(roleCapabilityRepository.saveAll(List.of(newEntity))).thenReturn(List.of(newEntity));
+      when(roleCapabilityEntityMapper.convert(newEntity)).thenReturn(newRoleCapability);
+      when(capabilitySetService.findByRoleId(ROLE_ID, MAX_VALUE, 0)).thenReturn(PageResult.empty());
+      when(capabilityEndpointService.getByCapabilityIds(newCapabilityIds, emptyList())).thenReturn(endpoints);
+
+      var result = roleCapabilityService.create(ROLE_ID, capabilityIds, true);
+
+      assertThat(result).isEqualTo(asSinglePage(newRoleCapability));
+      verify(capabilityService).checkIds(newCapabilityIds);
+      verify(rolePermissionService).createPermissions(ROLE_ID, endpoints);
+      verify(eventPublisher).publishEvent(tenantPermissionsChanged());
     }
 
     @Test

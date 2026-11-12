@@ -54,7 +54,7 @@ class RoleCapabilitySetControllerTest {
     var roleCapabilitySets = asSinglePage(roleCapabilitySet);
     var expectedRequest = new RoleCapabilitySetsRequest().roleId(ROLE_ID).addCapabilitySetIdsItem(CAPABILITY_SET_ID);
 
-    when(roleCapabilitySetService.create(expectedRequest, false)).thenReturn(roleCapabilitySets);
+    when(roleCapabilitySetService.create(expectedRequest, true)).thenReturn(roleCapabilitySets);
 
     var request = new RoleCapabilitySetsRequest().roleId(ROLE_ID).addCapabilitySetIdsItem(CAPABILITY_SET_ID);
     mockMvc.perform(post("/roles/capability-sets")
@@ -73,7 +73,7 @@ class RoleCapabilitySetControllerTest {
     var expectedRequest = new RoleCapabilitySetsRequest()
       .roleId(ROLE_ID).addCapabilitySetNamesItem(CAPABILITY_SET_NAME);
 
-    when(roleCapabilitySetService.create(expectedRequest, false)).thenReturn(roleCapabilitySets);
+    when(roleCapabilitySetService.create(expectedRequest, true)).thenReturn(roleCapabilitySets);
 
     var request = new RoleCapabilitySetsRequest().roleId(ROLE_ID).addCapabilitySetNamesItem(CAPABILITY_SET_NAME);
     mockMvc.perform(post("/roles/capability-sets")

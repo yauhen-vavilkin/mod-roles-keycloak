@@ -252,14 +252,12 @@ class RoleCapabilitySetIT extends BaseIntegrationTest {
   }
 
   @Test
-  void assignCapabilitySets_negative_emptyCapabilitySet() throws Exception {
-    var request = roleCapabilitySetsRequest(ROLE_ID, emptyList());
-    attemptToPostRoleCapabilitySets(request)
-      .andExpect(status().isBadRequest())
-      .andExpect(jsonPath("$.errors[0].message")
-        .value("'capabilitySetIds' or 'capabilitySetNames' must not be null"))
-      .andExpect(jsonPath("$.errors[0].type").value("IllegalArgumentException"))
-      .andExpect(jsonPath("$.errors[0].code").value("validation_error"));
+  @Sql("classpath:/sql/populate-test-role.sql")
+  void assignCapabilitySets_positive_emptyCapabilitySets() throws Exception {
+    postRoleCapabilitySets(roleCapabilitySetsRequest(ROLE_ID, emptyList()))
+      .andExpect(content().json(asJsonString(roleCapabilitySets())));
+
+    assertThat(kcTestClient.getPermissionNames()).isEmpty();
   }
 
   @Test
@@ -270,18 +268,17 @@ class RoleCapabilitySetIT extends BaseIntegrationTest {
     "classpath:/sql/capability-sets/populate-role-capability-set-relations.sql"
   })
   @KeycloakRealms("/json/keycloak/role-capability-fresh-realm.json")
-  void assignCapabilities_negative_alreadyAssigned() throws Exception {
-    var capabilitySetIds = List.of(FOO_CREATE_CAPABILITY_SET);
+  void assignCapabilitySets_positive_existingAssignmentsAreFilteredOut() throws Exception {
+    var capabilitySetIds = List.of(FOO_CREATE_CAPABILITY_SET, FOO_EDIT_CAPABILITY_SET);
     var request = roleCapabilitySetsRequest(ROLE_ID, capabilitySetIds);
+    var expectedRoleCapabilitySets = roleCapabilitySets(roleCapabilitySet(ROLE_ID, FOO_EDIT_CAPABILITY_SET));
 
-    attemptToPostRoleCapabilitySets(request)
-      .andExpect(status().isBadRequest())
-      .andExpect(jsonPath("$.total_records", is(1)))
-      .andExpect(jsonPath("$.errors[0].code", is("found_error")))
-      .andExpect(jsonPath("$.errors[0].type", is("EntityExistsException")))
-      .andExpect(jsonPath("$.errors[0].message", is(String.format(
-        "Relation already exists for role='%s' and capabilitySets=%s", ROLE_ID, capabilitySetIds))
-      ));
+    postRoleCapabilitySets(request)
+      .andExpect(content().json(asJsonString(expectedRoleCapabilitySets)));
+
+    assertThat(kcTestClient.getPermissionNames()).containsOnly(
+      kcPermissionName(fooItemGetEndpoint()),
+      kcPermissionName(fooItemPutEndpoint()));
   }
 
   @Test

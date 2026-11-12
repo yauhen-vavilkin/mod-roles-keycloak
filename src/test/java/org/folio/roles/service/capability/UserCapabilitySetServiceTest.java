@@ -24,7 +24,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.Collections;
 import java.util.List;
@@ -141,25 +140,55 @@ class UserCapabilitySetServiceTest {
     }
 
     @Test
-    void negative_emptyCapabilities() {
-      var capabilityIds = Collections.<UUID>emptyList();
-      assertThatThrownBy(() -> userCapabilitySetService.create(USER_ID, capabilityIds))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessage("List with capability set identifiers is empty");
+    void positive_emptyCapabilitySets() {
+      when(keycloakUserService.getKeycloakUserByUserId(USER_ID)).thenReturn(keycloakUser());
+
+      var result = userCapabilitySetService.create(USER_ID, Collections.<UUID>emptyList());
+
+      assertThat(result).isEqualTo(empty());
+      verifyNoInteractions(capabilitySetService, userCapabilitySetRepository, userPermissionService,
+        endpointService, eventPublisher);
     }
 
     @Test
-    void negative_existingAssignment() {
-      var capIds = List.of(capabilitySetId1, capabilitySetId2);
-      var userCapabilityEntity = userCapabilitySetEntity(USER_ID, capabilitySetId1);
-      var foundEntities = List.of(userCapabilityEntity);
+    void positive_filteredExistingCapabilitySets() {
+      var newUserCapabilitySet = userCapabilitySet(capabilitySetId2);
+      var capabilitySetIds = List.of(capabilitySetId1, capabilitySetId2);
+      var assignedEntity = userCapabilitySetEntity(USER_ID, capabilitySetId1);
+      var newEntity = userCapabilitySetEntity(capabilitySetId2);
+      var newCapabilitySetIds = List.of(capabilitySetId2);
+      var endpoints = List.of(endpoint());
 
       when(keycloakUserService.getKeycloakUserByUserId(USER_ID)).thenReturn(keycloakUser());
-      when(userCapabilitySetRepository.findUserCapabilitySets(USER_ID, capIds)).thenReturn(foundEntities);
+      when(userCapabilitySetRepository.findUserCapabilitySets(USER_ID, capabilitySetIds))
+        .thenReturn(List.of(assignedEntity));
+      when(userCapabilitySetRepository.saveAll(List.of(newEntity))).thenReturn(List.of(newEntity));
+      when(userCapabilitySetEntityMapper.convert(newEntity)).thenReturn(newUserCapabilitySet);
+      when(capabilityService.findByUserId(USER_ID, false, false, MAX_VALUE, 0)).thenReturn(empty());
+      when(endpointService.getByCapabilitySetIds(newCapabilitySetIds, emptyList(), emptyList())).thenReturn(endpoints);
 
-      assertThatThrownBy(() -> userCapabilitySetService.create(USER_ID, capIds))
-        .isInstanceOf(EntityExistsException.class)
-        .hasMessage("Relation already exists for user='%s' and capabilitySets=[%s]", USER_ID, capabilitySetId1);
+      var result = userCapabilitySetService.create(USER_ID, capabilitySetIds);
+
+      assertThat(result).isEqualTo(asSinglePage(newUserCapabilitySet));
+      verify(capabilitySetService).checkIds(newCapabilitySetIds);
+      verify(userPermissionService).createPermissions(USER_ID, endpoints);
+      verify(eventPublisher).publishEvent(userPermissionsChanged(USER_ID));
+    }
+
+    @Test
+    void positive_allCapabilitySetsAlreadyAssigned() {
+      var capIds = List.of(capabilitySetId1, capabilitySetId2);
+      var assignedEntities = List.of(
+        userCapabilitySetEntity(USER_ID, capabilitySetId1),
+        userCapabilitySetEntity(USER_ID, capabilitySetId2));
+
+      when(keycloakUserService.getKeycloakUserByUserId(USER_ID)).thenReturn(keycloakUser());
+      when(userCapabilitySetRepository.findUserCapabilitySets(USER_ID, capIds)).thenReturn(assignedEntities);
+
+      var result = userCapabilitySetService.create(USER_ID, capIds);
+
+      assertThat(result).isEqualTo(empty());
+      verifyNoInteractions(capabilitySetService, userPermissionService, endpointService, eventPublisher);
     }
 
     @Test
