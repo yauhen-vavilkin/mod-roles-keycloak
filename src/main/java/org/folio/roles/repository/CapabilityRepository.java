@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.folio.roles.domain.entity.CapabilityEntity;
 import org.folio.roles.repository.projection.CapabilityDirectProjection;
+import org.folio.roles.repository.projection.CapabilityIdProjection;
 import org.folio.roles.repository.projection.UserPermissionApplicationProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -135,9 +136,17 @@ public interface CapabilityRepository extends BaseCqlJpaRepository<CapabilityEnt
       WHERE c.dummy_capability = false""")
   Page<CapabilityEntity> findByRoleId(@Param("roleId") UUID roleId, Pageable pageable);
 
+  /**
+   * Returns deduplicated capability identifiers assigned to the role directly or via capability sets.
+   *
+   * <p>Only identifiers are selected on purpose: eager {@code endpoints} collections of hydrated
+   * {@link CapabilityEntity} rows would be loaded with one query per record for native queries. The
+   * caller hydrates the page content in batches instead. {@code name} is part of the select list
+   * because {@code ORDER BY name} appended from the page request requires it for {@code DISTINCT}.</p>
+   */
   @Query(nativeQuery = true,
     value = """
-      SELECT DISTINCT capability.* FROM (
+      SELECT DISTINCT capability.id, capability.name AS name FROM (
         SELECT c.* FROM capability c
           INNER JOIN role_capability rc ON c.id = rc.capability_id AND rc.role_id = :roleId
 
@@ -160,11 +169,20 @@ public interface CapabilityRepository extends BaseCqlJpaRepository<CapabilityEnt
           INNER JOIN capability_set_capability csc ON cs.id = csc.capability_set_id
           INNER JOIN capability c ON csc.capability_id = c.id
       ) capability""")
-  Page<CapabilityEntity> findAllByRoleIdIncludeDummy(@Param("roleId") UUID roleId, Pageable pageable);
+  Page<CapabilityIdProjection> findAllByRoleIdIncludeDummy(@Param("roleId") UUID roleId, Pageable pageable);
 
+  /**
+   * Returns deduplicated capability identifiers assigned to the role directly or via capability sets,
+   * excluding dummy capabilities.
+   *
+   * <p>Only identifiers are selected on purpose: eager {@code endpoints} collections of hydrated
+   * {@link CapabilityEntity} rows would be loaded with one query per record for native queries. The
+   * caller hydrates the page content in batches instead. {@code name} is part of the select list
+   * because {@code ORDER BY name} appended from the page request requires it for {@code DISTINCT}.</p>
+   */
   @Query(nativeQuery = true,
     value = """
-      SELECT DISTINCT capability.* FROM (
+      SELECT DISTINCT capability.id, capability.name AS name FROM (
         SELECT c.* FROM capability c
           INNER JOIN role_capability rc ON c.id = rc.capability_id AND rc.role_id = :roleId
 
@@ -187,7 +205,7 @@ public interface CapabilityRepository extends BaseCqlJpaRepository<CapabilityEnt
           INNER JOIN capability_set_capability csc ON cs.id = csc.capability_set_id
           INNER JOIN capability c ON csc.capability_id = c.id
       ) capability WHERE capability.dummy_capability = false""")
-  Page<CapabilityEntity> findAllByRoleId(@Param("roleId") UUID roleId, Pageable pageable);
+  Page<CapabilityIdProjection> findAllByRoleId(@Param("roleId") UUID roleId, Pageable pageable);
 
   @Query(nativeQuery = true,
     value = """
